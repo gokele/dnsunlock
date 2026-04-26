@@ -1,6 +1,10 @@
 # dnsunlock
 
+> 仓库: <https://github.com/gokele/dnsunlock>
+
 单二进制 DNS 解锁服务器：在你自己的 VPS 上跑一份，把 Netflix / ChatGPT / Disney+ / YouTube 等地区受限服务的域名重定向到本机，再由内置 SNI 透明代理转发到真实目标。出口 IP 决定能解锁哪个区域，代码本身和地区无关。
+
+无外部依赖：不装 dnsmasq、不装 sniproxy、不装数据库、不需要前端。一个二进制 + 一份 `.env` 解决一切。
 
 ---
 
@@ -184,6 +188,7 @@ sudo userdel dnsunlock
 | `PUBLIC_IP` | 自动探测 | 解锁域名 A 记录返回的 IP |
 | `UPSTREAM_DNS` | 自动选择 | 留空 = 启动时探测 v6 出口决定 v4-only / 双栈默认列表，否则按你写的来 |
 | `FILTER_AAAA` | `true` | 命中域名屏蔽 AAAA，防客户端走 v6 绕过 |
+| `REJECT_QUIC` | `true` | 监听 UDP/443，对 QUIC 包回 Version Negotiation 强制客户端走 TCP |
 | `ALLOWED_CLIENTS` |（必填） | 客户端 IP / CIDR 白名单，逗号分隔 |
 | `SUBSCRIPTION_INTERVAL` | `24h` | 订阅源刷新间隔 |
 | `SUBSCRIPTION_TIMEOUT` | `30s` | 单次拉取超时 |
@@ -214,10 +219,7 @@ sudo userdel dnsunlock
 
 ## 已知限制
 
-1. **HTTP/3 (QUIC)**：YouTube / Netflix 等优先尝试 UDP/443，我们只代理 TCP，客户端 1-3 秒超时后回退 TCP。可以在客户端禁用 QUIC，或在网关 iptables `DROP UDP/443`：
-   ```bash
-   iptables -A OUTPUT -p udp --dport 443 -j DROP
-   ```
+1. **HTTP/3 (QUIC)**：默认 `REJECT_QUIC=true`，服务端会监听 UDP/443 并对 QUIC 初始包回 supported_versions 为空的 Version Negotiation，客户端按 RFC 9000 §6 立即放弃 QUIC 改走 TCP（毫秒级回退，无超时）。如果你不想让我们碰 UDP/443（端口被别的 QUIC 服务占用等），可以 `REJECT_QUIC=false` 关掉，但客户端可能要等 1-3 秒 QUIC 超时才回退。
 
 2. **DoH / DoT 旁路**：Firefox 默认开 DoH (Cloudflare)、iOS 私人中继、Windows 11 安全 DNS 都会绕过系统 DNS，解锁失效。**必须**关掉浏览器和系统的"安全 DNS"。
 
@@ -233,7 +235,7 @@ sudo userdel dnsunlock
 |---|---|---|
 | `nslookup` 返回 `;; connection timed out` | 客户端 IP 不在白名单 | `dnsunlock allow <ip>` |
 | `nslookup` 通了但应用打不开 | 浏览器开了 DoH | 关掉浏览器的"安全 DNS" |
-| 视频缓冲很慢首次连接卡 | QUIC 在尝试 v6 / UDP 路径 | 客户端禁用 QUIC，或 iptables DROP UDP/443 |
+| 视频缓冲很慢首次连接卡 | QUIC 在尝试 UDP/443 | 默认 `REJECT_QUIC=true` 已自动处理；若关掉了重新打开 |
 | `systemctl status dnsunlock` 是 `failed` | 53 被 systemd-resolved 占了 | install 已自动处理；如果绕开了，手工 `DNSStubListener=no` |
 | `dnsunlock update` 报 `update 未启用` | 这份二进制编译时没注入 repo | 用 release 页面的官方二进制重装一次 |
 | `dnsunlock update` 报 GitHub 403 | API 速率限制 (60/小时未登录) | 换个出口 IP 或稍后再试，已下载完不影响运行 |
