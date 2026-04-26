@@ -1,5 +1,7 @@
 # dnsunlock
 
+> 仓库: <https://github.com/gokele/dnsunlock>
+
 单二进制 DNS 解锁服务器：在你自己的 VPS 上跑一份，把 Netflix / ChatGPT / Disney+ / YouTube 等地区受限服务的域名重定向到本机，再由内置 SNI 透明代理转发到真实目标。出口 IP 决定能解锁哪个区域，代码本身和地区无关。
 
 无外部依赖：不装 dnsmasq、不装 sniproxy、不装数据库、不需要前端。一个二进制 + 一份 `.env` 解决一切。
@@ -11,11 +13,14 @@
 服务器要求：Linux + root 权限 + 公网 IPv4。
 
 ```bash
-# 1. 上传二进制（amd64 / arm64 二选一）
-scp dnsunlock_linux_amd64 root@<server>:/tmp/d
+# 1. 从 GitHub Releases 下载对应架构的二进制
+curl -L -o /tmp/d \
+  https://github.com/gokele/dnsunlock/releases/latest/download/dnsunlock_linux_amd64
+# ARM64 (Oracle Free / AWS Graviton / 树莓派) 用这个:
+# curl -L -o /tmp/d https://github.com/gokele/dnsunlock/releases/latest/download/dnsunlock_linux_arm64
 
-# 2. SSH 上去, 一条命令完成: chmod + install (会自动启动 systemd 服务)
-ssh root@<server> "chmod +x /tmp/d && /tmp/d install --clients <your_client_ip>"
+# 2. 一条命令完成: chmod + install (会自动启动 systemd 服务)
+chmod +x /tmp/d && sudo /tmp/d install --clients <your_client_ip>
 ```
 
 `install` 内部自动做了：
@@ -33,10 +38,7 @@ ssh root@<server> "chmod +x /tmp/d && /tmp/d install --clients <your_client_ip>"
 客户端的**公网 IP 或 CIDR 段**。没在白名单里的客户端会被 53/80/443 直接拒绝，避免被陌生人白嫖带宽。
 
 ```bash
-# 单个 IP
 --clients 1.2.3.4
-
-# 多个 IP / 整段 CIDR
 --clients 1.2.3.4,5.6.7.8,10.0.0.0/24
 ```
 
@@ -67,8 +69,7 @@ sudo tee /etc/resolv.conf <<EOF
 nameserver <server_ip>
 nameserver 1.1.1.1
 EOF
-# 防止 DHCP 覆盖
-sudo chattr +i /etc/resolv.conf
+sudo chattr +i /etc/resolv.conf       # 防止 DHCP 覆盖
 ```
 
 ### macOS
@@ -92,11 +93,9 @@ sudo chattr +i /etc/resolv.conf
 ```bash
 # 解锁域名应返回服务器 IP
 nslookup chatgpt.com <server_ip>
-# 应该看到: Address: <server_ip>
 
 # 普通域名应返回真实 IP
 nslookup google.com <server_ip>
-# 应该看到 Google 真实 IP
 
 # 实际访问验证
 curl -v --resolve chatgpt.com:443:<server_ip> https://chatgpt.com/cdn-cgi/trace
@@ -127,18 +126,26 @@ sudo dnsunlock list                         # 看当前列表
 ssh root@<server> "dnsunlock allow $(curl -s ifconfig.me)"
 ```
 
-### 升级二进制
+### 升级二进制（从 GitHub 自动拉最新）
 
 ```bash
-# 本地重新打 (Windows)
-.\build.ps1 release
-
-# 上传 + 一键 update
-scp dnsunlock_linux_amd64 root@<server>:/tmp/d
-ssh root@<server> "chmod +x /tmp/d && /tmp/d update"
+sudo dnsunlock update              # 查最新 release, 有更新则自动下载并重启
+sudo dnsunlock update --check      # 只查不更新
+sudo dnsunlock update --force      # 强制重装一次 (即使版本号相同)
+sudo dnsunlock update --file /tmp/d # 离线场景: 用本地二进制升级
 ```
 
-`update` 会原子替换 `/usr/local/bin/dnsunlock`（运行中的旧进程不影响），然后 `systemctl restart`。
+`update` 内部：查询 `https://api.github.com/repos/gokele/dnsunlock/releases/latest` → 比较 semver → 下载对应架构资产到临时文件 → 原子替换 `/usr/local/bin/dnsunlock`（运行中的旧进程不影响）→ `setcap` → `systemctl restart`。
+
+### 查看版本
+
+```bash
+dnsunlock version
+# dnsunlock v0.1.0
+# source:    https://github.com/gokele/dnsunlock
+# platform:  linux/amd64
+# go:        go1.26.2
+```
 
 ### 修改 `.env`
 
@@ -232,8 +239,8 @@ sudo userdel dnsunlock
 | `nslookup` 通了但应用打不开 | 浏览器开了 DoH | 关掉浏览器的"安全 DNS" |
 | 视频缓冲很慢首次连接卡 | QUIC 在尝试 v6 / UDP 路径 | 客户端禁用 QUIC，或 iptables DROP UDP/443 |
 | `systemctl status dnsunlock` 是 `failed` | 53 被 systemd-resolved 占了 | install 已自动处理；如果绕开了，手工 `DNSStubListener=no` |
-| 解锁域名没解到本机 IP | 订阅源拉取失败 / 域名不在内置目录 | 看日志 `journalctl -u dnsunlock`，必要时改 `internal/sub/builtin.go` 加域名后重新构建 |
-| 改 `.env` 后没生效 | 没 reload | `systemctl reload dnsunlock` |
+| `dnsunlock update` 报 `update 未启用` | 这份二进制编译时没注入 repo | 用 release 页面的官方二进制重装一次 |
+| `dnsunlock update` 报 GitHub 403 | API 速率限制 (60/小时未登录) | 换个出口 IP 或稍后再试，已下载完不影响运行 |
 
 ---
 
@@ -244,12 +251,16 @@ dnsunlock                       前台运行（开发调试）
 dnsunlock --env <path>          前台运行，自定义 .env 路径
 
 dnsunlock install --clients X   首次安装并启动（root 必需）
-dnsunlock update                替换二进制并重启服务（root 必需）
+dnsunlock update                从 GitHub Releases 拉最新版（root 必需）
+  --check                       只检查不下载
+  --force                       即使版本相同也重装
+  --file <path>                 用本地文件升级（离线场景）
 dnsunlock uninstall             停止并移除 systemd 服务
 
 dnsunlock allow <IP/CIDR>...    加白名单 + 热重载
 dnsunlock deny  <IP/CIDR>...    去白名单 + 热重载
 dnsunlock list                  打印当前白名单
 
+dnsunlock version               打印版本元信息
 dnsunlock help                  帮助
 ```
