@@ -142,7 +142,6 @@ sudo systemctl restart systemd-resolved
 ```bash
 sudo tee /etc/resolv.conf <<EOF
 nameserver <server_ip>
-nameserver 1.1.1.1
 EOF
 sudo chattr +i /etc/resolv.conf       # 防止 DHCP 覆盖
 ```
