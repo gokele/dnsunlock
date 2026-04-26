@@ -121,9 +121,43 @@ curl ifconfig.me
 
 ---
 
-## 客户端配置
+## 客户端配置（让设备 DNS 指向这台服务器）
 
-略（与原文一致，直接保留）
+### Linux（systemd-resolved，Debian 12+ / Ubuntu 默认）
+
+```bash
+sudo mkdir -p /etc/systemd/resolved.conf.d
+sudo tee /etc/systemd/resolved.conf.d/dnsunlock.conf <<EOF
+[Resolve]
+DNS=<server_ip>
+FallbackDNS=
+Domains=~.
+DNSStubListener=yes
+EOF
+sudo systemctl restart systemd-resolved
+```
+
+### Linux（直接改 resolv.conf，纯服务器场景）
+
+```bash
+sudo tee /etc/resolv.conf <<EOF
+nameserver <server_ip>
+nameserver 1.1.1.1
+EOF
+sudo chattr +i /etc/resolv.conf       # 防止 DHCP 覆盖
+```
+
+### macOS
+
+系统设置 → 网络 → 当前连接 → 详细信息 → DNS → 把 DNS 服务器改成你的服务器 IP。
+
+### Windows
+
+设置 → 网络 → 以太网/WiFi → 编辑 DNS 服务器分配 → 手动 → 填入服务器 IP。
+
+### 路由器
+
+家用路由器后台一般有"DNS 服务器"或"DHCP DNS"设置，填服务器 IP，整个家庭网络的设备都自动用。
 
 ---
 
