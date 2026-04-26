@@ -44,7 +44,7 @@ curl -LO https://github.com/gokele/dnsunlock/releases/latest/download/dnsunlock_
 
 arm64 (Oracle Free / AWS Graviton / 树莓派) 把 `dnsunlock_linux_amd64` 全部换成 `dnsunlock_linux_arm64` 即可。
 
-### macOS (Apple Silicon, M1/M2/M3/M4)
+### macOS (Apple Silicon, M系列芯片)
 
 ```bash
 curl -LO https://github.com/gokele/dnsunlock/releases/latest/download/dnsunlock_macos_arm64 && chmod +x dnsunlock_macos_arm64 && sudo ./dnsunlock_macos_arm64
