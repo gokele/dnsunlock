@@ -1,7 +1,7 @@
 # dnsunlock
 
 <p align="center">
-  <img src="[https://raw.githubusercontent.com/gokele/dnsunlock/main/.github/logo.png](https://avatars.githubusercontent.com/u/49964567)" width="120" />
+  <img src="[[https://raw.githubusercontent.com/gokele/dnsunlock/main/.github/logo.png](https://avatars.githubusercontent.com/u/49964567)](https://raw.githubusercontent.com/gokele/dnsunlock/refs/heads/main/logo.png)" width="120" />
 </p>
 
 <p align="center">
