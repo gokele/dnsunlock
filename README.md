@@ -104,10 +104,6 @@ curl.exe -LO https://github.com/gokele/dnsunlock/releases/latest/download/dnsunl
   q) 退出
 ```
 
-- **运行中** → 第 1 项是"停止服务"，已隐藏 install
-- **已装未跑** → 第 1 项是"启动服务"，已隐藏 install
-- **未安装** → 第 1 项是"未安装 (按 1 开始安装)"，按 1 直接进 install 流程
-
 输入序号或对应英文别名（`stop`/`start`/`install`/`update`/...）都可以。systemd / launchd / sc 拉起的 daemon 走 `serve` 路径不会进菜单。
 
 ---
