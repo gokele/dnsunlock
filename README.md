@@ -19,6 +19,7 @@
   <img src="https://img.shields.io/badge/Windows-supported-0078D6?logo=windows&logoColor=white&style=flat-square" />
   <img src="https://img.shields.io/badge/amd64%20%7C%20arm64-supported-blue?style=flat-square" />
 </p>
+
 ---
 
 ## 项目简介
