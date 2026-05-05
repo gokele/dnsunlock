@@ -19,7 +19,6 @@
   <img src="https://img.shields.io/badge/Windows-supported-0078D6?logo=windows&logoColor=white&style=flat-square" />
   <img src="https://img.shields.io/badge/amd64%20%7C%20arm64-supported-blue?style=flat-square" />
 </p>
-
 ---
 
 ## 项目简介
@@ -103,6 +102,10 @@ curl.exe -LO https://github.com/gokele/dnsunlock/releases/latest/download/dnsunl
   h) 完整帮助
   q) 退出
 ```
+
+- **运行中** → 第 1 项是"停止服务"，已隐藏 install
+- **已装未跑** → 第 1 项是"启动服务"，已隐藏 install
+- **未安装** → 第 1 项是"未安装 (按 1 开始安装)"，按 1 直接进 install 流程
 
 输入序号或对应英文别名（`stop`/`start`/`install`/`update`/...）都可以。systemd / launchd / sc 拉起的 daemon 走 `serve` 路径不会进菜单。
 
@@ -294,10 +297,11 @@ Remove-Item -Recurse "$env:ProgramData\dnsunlock"
 | `LISTEN_HTTP` | `:80` | HTTP 透明代理 |
 | `LISTEN_HTTPS` | `:443` | TLS SNI 透明代理 |
 | `PUBLIC_IP` | 自动探测 | 解锁域名 A 记录返回的 IP |
-| `UPSTREAM_DNS` | 自动选择 | 留空 = 启动时探测 v6 出口决定 v4-only / 双栈默认列表 |
+| `UPSTREAM_DNS` | 自动选择 | 留空 = 启动时探测 v6 出口决定 v4-only / 双栈默认列表；显式可加 `tls://1.1.1.1:853` 走 DoT |
 | `FILTER_AAAA` | `true` | 命中域名屏蔽 AAAA，防客户端走 v6 绕过 |
 | `REJECT_QUIC` | `true` | 监听 UDP/443，对 QUIC 包回 Version Negotiation 强制客户端走 TCP |
 | `OUTBOUND_PREFER` | `auto` | SNI proxy 出站偏好：`auto` (Happy Eyeballs 双栈并发) / `v4` / `v6` / `v4-then-v6` / `v6-then-v4` |
+| `OUTBOUND_REQUIRE_MATCH` | `true` | SNI proxy 仅出站到内置解锁目录里的域名，防止被当通用 SOCKS / 内网跳板。`false` 兼容老行为 |
 | `SERVER_REGION` | `AUTO` | 服务器出口地区 (ISO 3166-1 alpha-2)，决定按地区过滤启用哪些服务；显式填 `JP` / `SG` / `US` / `GB` / `HK` / `TW` / `CN` 等可覆盖 |
 | `ALLOWED_CLIENTS` |（必填） | 客户端 IP / CIDR 白名单，逗号分隔 |
 | `SUBSCRIPTION_INTERVAL` | `24h` | 订阅源刷新间隔 |
@@ -312,7 +316,7 @@ Remove-Item -Recurse "$env:ProgramData\dnsunlock"
 
 ## 内置可解锁服务
 
-收录 50+ 个常用服务的域名清单，**全部默认启用**，不需要在 `.env` 里挑选。能否真正解锁取决于你服务器的出口 IP 区域：
+收录 50+ 个常用服务的域名清单，**全部默认启用**。能否真正解锁取决于你服务器的出口 IP 区域：
 
 - **AI**：OpenAI / Claude / Gemini / Copilot / Perplexity / Grok / HuggingFace / Suno / Midjourney / Character.AI
 - **Google 系**：Google Search / YouTube / YouTube Music
@@ -332,11 +336,25 @@ Remove-Item -Recurse "$env:ProgramData\dnsunlock"
 
 1. **HTTP/3 (QUIC)**：默认 `REJECT_QUIC=true`，服务端监听 UDP/443 并对 QUIC 初始包回 supported_versions 为空的 Version Negotiation，客户端按 RFC 9000 §6 立即放弃 QUIC 改走 TCP（毫秒级回退）。如果不想让我们碰 UDP/443，可以 `REJECT_QUIC=false` 关掉，但客户端可能要等 1-3 秒 QUIC 超时才回退。
 
-2. **DoH / DoT 旁路**：Firefox 默认开 DoH (Cloudflare)、iOS 私人中继、Windows 11 安全 DNS 都会绕过系统 DNS，解锁失效。**必须**关掉浏览器和系统的"安全 DNS"。
+2. **DoH / DoT 旁路**：Firefox 默认开 DoH (Cloudflare)、iOS 私人中继、Windows 11 安全 DNS 都会绕过系统 DNS，解锁失效。**必须**关掉浏览器和系统的"安全 DNS"。dnsunlock 对 Firefox 的 canary 域 `use-application-dns.net` 硬回 NXDOMAIN，Firefox 见状会自动关掉自动 DoH，省掉一类用户的手动配置。
 
 3. **TLS ECH**：未来 ECH 普及后，SNI 加密了我们看不到目标域名，L4 透明代理这条路就走不通了。目前 ECH 部署率很低，能稳定用 1-2 年。
 
-4. **客户端 IPv6 绕过**：客户端如果有 IPv6 公网，AAAA 查询路径上必须经过我们的 DNS 才会被 `FILTER_AAAA` 过滤。如果客户端有别的 IPv6 DNS（路由器 RA 推下来的），AAAA 会绕过我们。客户端配置时要把 v6 的 DNS 也指向我们（或干脆禁用 v6）。
+4. **客户端 IPv6 绕过**：客户端如果有 IPv6 公网，AAAA 查询路径上必须经过我们的 DNS 才会被 `FILTER_AAAA` 过滤。如果客户端有别的 IPv6 DNS（路由器 RA 推下来的），AAAA 会绕过我们。客户端配置时要把 v6 的 DNS 也指向我们（或干脆禁用 v6）。`dnsunlock test` 会在服务器有 v6 出口时给出该提示。
+
+## DNS 泄露与滥用防护（服务端侧）
+
+服务端默认开启的硬化项：
+
+- **`OUTBOUND_REQUIRE_MATCH=true`**：SNI proxy 只接受内置解锁目录里的域名，不允许把本机当通用 SOCKS / 内网跳板。
+- **拨号目标 IP 黑名单**：拒绝 RFC1918 / loopback / link-local / multicast / CGNAT / 本机公网 IP，避免 SNI 写 `IP`（云元数据）或解锁域绕回自己。
+- **sniproxy 出站名解析走自家上游 DNS**：不读 `/etc/resolv.conf`，杜绝"系统 stub 指回 :53 → matcher 命中 → 拨自己"的环路与系统 DNS 泄露。
+- **上游 DoT 支持**：`UPSTREAM_DNS=tls://1.1.1.1:853` 让本机的未命中查询走 TLS 加密，ISP 看不到查了什么。
+- **0x20 大小写随机化**：发往上游的 qname 字符大小写随机翻转 + 校验响应，挡住绝大部分盲投毒。
+- **NXDOMAIN 短缓存（≤60s）**：错配域名重复查询不会每次都打到上游。
+- **拒绝 ANY 查询**：`Rcode NOTIMP`，挡 DNS 反射放大攻击向量。
+- **Firefox canary 硬 NXDOMAIN**：让 Firefox 自动闭嘴 DoH，把查询交还给系统 DNS（即我们）。
+- **TLS sniff 5 秒上限 + HTTP 头 16KB 上限 + 连接 12h 寿命**：抵御 slowloris / 巨头攻击 / 心跳占槽。
 
 ---
 
